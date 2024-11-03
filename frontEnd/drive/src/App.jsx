@@ -1,67 +1,33 @@
+// src/App.js
 import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import Login from './Login';
+import Signup from './Signup';
+import Home from './Home'; // Create a separate Home component for file upload functionality
+import Logout from './Logout';
 
 function App() {
-    const [file, setFile] = useState(null);
-    const [fileUrl, setFileUrl] = useState('');
+    const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('authToken'));
 
-    const handleFileChange = (e) => {
-        setFile(e.target.files[0]);
+    const handleLoginSuccess = () => {
+        setIsLoggedIn(true);
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            const response = await axios.post('http://localhost:5000/upload', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
-            setFileUrl(response.data.url);
-        } catch (error) {
-            console.error('Error uploading file:', error);
-        }
+    const handleLogout = () => {
+        localStorage.removeItem('authToken');
+        setIsLoggedIn(false);
     };
 
     return (
-        <div className="flex items-center justify-center min-h-screen bg-green-200">
-            <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-                <h1 className="text-2xl font-bold mb-4 text-center">File Storage</h1>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <input
-                        type="file"
-                        onChange={handleFileChange}
-                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4
-                                   file:rounded-full file:border-0
-                                   file:text-sm file:font-semibold
-                                   file:bg-gray-200 file:text-gray-700
-                                   hover:file:bg-gray-300"
-                    />
-                    <button
-                        type="submit"
-                        className="w-full bg-blue-500 text-white py-2 rounded-md hover:bg-blue-600 transition duration-200"
-                    >
-                        Upload
-                    </button>
-                </form>
-                {fileUrl && (
-                    <div className="mt-4">
-                        <h2 className="text-lg font-semibold">Uploaded File:</h2>
-                        <a
-                            href={fileUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-500 hover:underline"
-                        >
-                            {fileUrl}
-                        </a>
-                    </div>
-                )}
-            </div>
-        </div>
+        <Router>
+            <Routes>
+                <Route path="/login" element={isLoggedIn ? <Navigate to="/" /> : <Login onLoginSuccess={handleLoginSuccess} />} />
+                <Route path="/signup" element={<Signup onSignupSuccess={handleLoginSuccess} />} />
+                <Route path="/" element={isLoggedIn ? <Home onLogout={handleLogout} /> : <Navigate to="/login" />} />
+                <Route path="/logout" element={<Logout handleLogout={handleLogout} />} />
+            </Routes>
+        </Router>
     );
 }
 

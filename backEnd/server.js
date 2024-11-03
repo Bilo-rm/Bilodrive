@@ -2,12 +2,14 @@ const express = require('express');
 const multer = require('multer');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const cors = require('cors');
+const authRoutes = require('./routes/authRoutes');
 require('dotenv').config();
 console.log('Environment Variables:', process.env);
 
 
 const app = express();
 app.use(cors());
+app.use(express.json()); // Middleware to parse JSON data
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -41,6 +43,17 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         console.error(err);
         res.status(500).send(err);
     }
+});
+
+// Authentication routes
+app.use('/auth', authRoutes);
+app.post('/logout', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            return res.status(500).send('Could not log out.');
+        }
+        res.status(200).send('Logged out successfully.');
+    });
 });
 
 const PORT = process.env.PORT || 5000;
