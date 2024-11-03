@@ -42,4 +42,33 @@ const authController = {
     }
 };
 
-module.exports = authController;
+
+const verifyToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        return res.sendStatus(401); // Unauthorized
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
+        if (err) {
+            return res.sendStatus(403); // Forbidden
+        }
+
+        // Find the user by ID
+        const user = await User.findById(decoded.userId); // Assuming you have this method
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        req.user = user; // Attach user object to request object
+        next();
+    });
+};
+
+
+module.exports = { ...authController, verifyToken };
+
+
+//module.exports = authController;

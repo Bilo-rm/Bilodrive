@@ -1,6 +1,7 @@
 // src/components/Home.js
 import React, { useState } from 'react';
 import axios from 'axios';
+import UserFiles from './UserFiles'; // Import UserFiles component
 
 function Home({ onLogout }) {
     const [file, setFile] = useState(null);
@@ -38,6 +39,7 @@ function Home({ onLogout }) {
                     Upload
                 </button>
             </form>
+            
             {fileUrl && (
                 <div className="mt-4">
                     <h2 className="text-lg font-semibold">Uploaded File:</h2>
@@ -46,6 +48,10 @@ function Home({ onLogout }) {
                     </a>
                 </div>
             )}
+
+            {/* Include the UserFiles component */}
+            <UserFiles />
+
             <button onClick={onLogout} className="w-full bg-red-500 text-white py-2 rounded-md hover:bg-red-600 transition duration-200 mt-4">
                 Logout
             </button>

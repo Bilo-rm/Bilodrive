@@ -17,6 +17,13 @@ const User = {
         return result.rows[0];
     },
 
+    async findById(id) {
+        const result = await db.query('SELECT * FROM users WHERE id = $1', [id]);
+        return result.rows[0];
+    },
+    
+
+
     async comparePasswords(password, hashedPassword) {
         return bcrypt.compare(password, hashedPassword);
     }
