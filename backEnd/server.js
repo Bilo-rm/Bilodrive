@@ -1,7 +1,7 @@
 // server.js
 const express = require('express');
 const multer = require('multer');
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand   } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand,DeleteObjectCommand, ListObjectsCommand  } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
@@ -28,14 +28,15 @@ const s3 = new S3Client({
     },
 });
 
-// server.js
-
 app.post('/upload', verifyToken, upload.single('file'), async (req, res) => {
     const { folderName } = req.body; // Optional folder name from request body
-    const { folderId } = req.body;
+    let { folderId } = req.body;    // Optional folder ID
     const fileName = req.file.originalname; // Original file name
-    const userId = req.user.id; // ID from authenticated user
- 
+    const userId = req.user.id;       // ID from authenticated user
+
+    // Ensure folderId is an integer if provided; otherwise, set to null
+    folderId = folderId && !isNaN(folderId) ? parseInt(folderId, 10) : null;
+
     // Define S3 Key, adding folder structure if provided
     const fileKey = folderName ? `${folderName}/${fileName}` : fileName;
 
@@ -52,10 +53,17 @@ app.post('/upload', verifyToken, upload.single('file'), async (req, res) => {
         await s3.send(command);
         const fileUrl = `https://${process.env.S3_BUCKET_NAME}.s3.amazonaws.com/${fileKey}`;
 
-        // Save file details in the database
+        // Insert file details into the database
         await pool.query(
-            'INSERT INTO files (user_id, file_name, file_url, folder_name, folder_id) VALUES ($1, $2, $3, $4, $5)',
-            [userId, fileName, fileUrl, folderName, folderId || null] // folderName set to null if empty
+            `INSERT INTO files (user_id, file_name, file_url, folder_name, folder_id)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [
+                userId,
+                fileName,
+                fileUrl,
+                folderName || null, // folderName set to null if not provided
+                folderId             // folderId as integer or null if invalid
+            ]
         );
 
         // Respond with success and file URL
@@ -64,9 +72,8 @@ app.post('/upload', verifyToken, upload.single('file'), async (req, res) => {
         console.error('Error uploading file:', err);
         res.status(500).json({ message: 'File upload failed' });
     }
-    console.log("Received folderId:", folderId);
-
 });
+
 
 
 // Route to fetch user-specific files
@@ -176,16 +183,50 @@ app.get('/api/folders', verifyToken, async (req, res) => {
 app.delete('/api/folders/:id', verifyToken, async (req, res) => {
     const folderId = req.params.id;
     const userId = req.user.id;
-    
+
     try {
-        // Delete folder from database
-        await pool.query(
-            'DELETE FROM folders WHERE id = $1 AND created_by = $2',
+        // Fetch the folder name to determine the S3 prefix
+        const folderResult = await pool.query(
+            'SELECT name FROM folders WHERE id = $1 AND created_by = $2',
             [folderId, userId]
         );
-        res.status(200).send('Folder deleted successfully');
+
+        if (folderResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Folder not found or access denied' });
+        }
+
+        const folderName = folderResult.rows[0].name;
+        const folderPrefix = `${folderName}/`;  // Folder prefix for S3
+
+        // List objects in S3 with the folder prefix
+        const listParams = {
+            Bucket: process.env.S3_BUCKET_NAME,
+            Prefix: folderPrefix
+        };
+
+        const listCommand = new ListObjectsCommand(listParams);
+        const listResponse = await s3.send(listCommand);
+
+        // If there are files with this prefix, delete them
+        if (listResponse.Contents.length > 0) {
+            const deleteParams = {
+                Bucket: process.env.S3_BUCKET_NAME,
+                Delete: {
+                    Objects: listResponse.Contents.map((file) => ({ Key: file.Key }))
+                }
+            };
+
+            const deleteCommand = new DeleteObjectsCommand(deleteParams);
+            await s3.send(deleteCommand);
+        }
+
+        // Delete the folder and related files from the database
+        await pool.query('DELETE FROM files WHERE folder_id = $1 AND user_id = $2', [folderId, userId]);
+        await pool.query('DELETE FROM folders WHERE id = $1 AND created_by = $2', [folderId, userId]);
+
+        res.status(200).send('Folder and its contents deleted successfully');
     } catch (error) {
-        console.error('Error deleting folder:', error);
+        console.error('Error deleting folder and files:', error);
         res.status(500).send('Error deleting folder');
     }
 });

@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-function UserFiles() {
+function UserFiles({ folderId = null }) {
     const [userFiles, setUserFiles] = useState([]);
 
     // Function to fetch the list of files
     const fetchFiles = async () => {
         try {
             const token = localStorage.getItem('authToken');
-            const response = await axios.get('http://localhost:5000/api/files', {
+            let url = 'http://localhost:5000/api/files';
+            if (folderId) {
+                url = `http://localhost:5000/api/folders/${folderId}/files`; // Fetch files from a specific folder
+            }
+
+            const response = await axios.get(url, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -19,37 +24,31 @@ function UserFiles() {
         }
     };
 
-    // Fetch files when component loads
+    // Fetch files when component loads or folderId changes
     useEffect(() => {
         fetchFiles();
-    }, []);
-    fetchFiles();
+    }, [folderId]);
 
     // Handle file download
     const handleDownload = async (fileName) => {
         try {
             const token = localStorage.getItem('authToken');
-            // Fetch the file as a blob
             const response = await axios.get(`http://localhost:5000/api/files/download/${fileName}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 },
                 responseType: 'blob' // Important: Set response type to 'blob'
             });
-    
-            // Create a URL for the file
+
             const downloadUrl = window.URL.createObjectURL(new Blob([response.data]));
-    
-            // Create a temporary link element
+
             const link = document.createElement('a');
             link.href = downloadUrl;
             link.setAttribute('download', fileName); // Set the filename for download
-    
-            // Append the link to the body
+
             document.body.appendChild(link);
             link.click(); // Trigger the download
-    
-            // Clean up and remove the link
+
             link.remove();
             window.URL.revokeObjectURL(downloadUrl);
         } catch (error) {
@@ -57,7 +56,7 @@ function UserFiles() {
             alert('Failed to download the file.');
         }
     };
-    
+
     // Handle file deletion
     const handleDelete = async (fileName) => {
         try {
